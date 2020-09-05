@@ -1,0 +1,122 @@
+  # REPORT PROPERTIES
+	# Path to the report
+		$reportPath = "C:\Reports\";
+
+	# Report name
+		$reportName = "CertRpt_$(get-date -format ddMMyyyy).html";
+
+$CertCritical = 90;
+
+$computers = Get-Content C:\Reports\servers.txt
+# Path and Report name together
+$certificatereport = $reportPath + $reportName
+
+$i = 0;
+
+#Set colors for table cell backgrounds
+$redColor = "#FF0000"
+$orangeColor = "#FBB917"
+$whiteColor = "#FFFFFF"
+
+
+# Create and write HTML Header of report
+$titleDate = get-date -uformat "%m-%d-%Y - %A"
+$header = "
+		<html>
+		<head>
+		<meta http-equiv='Content-Type' content='text/html; charset=iso-8859-1'>
+		<title>Certificate Report</title>
+		<STYLE TYPE='text/css'>
+		<!--
+		td {
+			font-family: Tahoma;
+			font-size: 11px;
+			border-top: 1px solid #999999;
+			border-right: 1px solid #999999;
+			border-bottom: 1px solid #999999;
+			border-left: 1px solid #999999;
+			padding-top: 0px;
+			padding-right: 0px;
+			padding-bottom: 0px;
+			padding-left: 0px;
+		}
+		body {
+			margin-left: 5px;
+			margin-top: 5px;
+			margin-right: 0px;
+			margin-bottom: 10px;
+			table {
+			border: thin solid #000000;
+		}
+		-->
+		</style>
+		</head>
+		<body>
+		<table width='100%'>
+		<tr bgcolor='#CCCCCC'>
+		<td colspan='7' height='25' align='center'>
+		<font face='tahoma' color='#003399' size='4'><strong>CERTIFICATE EXPIRY REPORT</strong></font>
+		</td>
+		</tr>
+		</table>
+"
+ Add-Content $certificatereport $header
+
+# Create and write Table header for report
+ $tableHeader = "
+ <table width='100%'><tbody>
+	<tr bgcolor=#CCCCCC>
+    <td width='10%' align='center'>Server</td>
+	<td width='5%' align='center'>Subject</td>
+	<td width='15%' align='center'>FriendlyName</td>
+	<td width='10%' align='center'>Thumbprint</td>
+	<td width='10%' align='center'>Expiring in (Days)</td>
+	</tr>
+"
+Add-Content $certificatereport $tableHeader
+
+foreach($computer in $computers)
+	{	
+	$certs = Invoke-Command -ComputerName $computer -Command { get-childitem cert:LocalMachine -recurse | where-object {$_.NotAfter -gt (get-date)} | select Subject,FriendlyName,Thumbprint,@{Name="Expires_in_Days";Expression={($_.NotAfter).subtract([DateTime]::Now).days}}  }
+	$computer = $computer.toupper()
+		foreach($cert in $certs)
+	{        
+		$Subject = $cert.Subject;
+        $FriendlyName = $cert.FriendlyName;
+		[float]$Expires_in_Days = $cert.Expires_in_Days;
+		$Thumbprint = $cert.Thumbprint;
+		$color = $whiteColor;
+
+ 
+ 
+  if($Expires_in_Days -lt $CertCritical)
+        {
+        $color = $redColor
+       }   
+
+  
+   # Create table data rows 
+    $dataRow = "
+		<tr>
+        <td width='10%'>$computer</td>
+		<td width='5%' bgcolor=`'$color`' align='center'>$Subject</td>
+		<td width='15%' >$FriendlyName</td>
+		<td width='10%' bgcolor=`'$color`' align='center'>$Thumbprint</td>
+		<td width='10%' bgcolor=`'$color`' align='center'>$Expires_in_Days</td>
+		</tr>
+"
+Add-Content $certificatereport $dataRow;
+$i++
+}
+ 
+ }
+
+ 	Add-Content $certificatereport $tableDescription
+	Add-Content $certificatereport "</body></html>"
+
+
+$html_output = Get-Content C:\Reports\CertRpt_$(get-date -format ddMMyyyy).html
+
+
+Send-MailMessage -To ToAddress@to.com -From CertificateReport@report.com -subject "Certificate Report" -BodyAsHtml ($html_output | Out-String) -SmtpServer smtp.server.com
+## END OF SCRIPT ###
